@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+
+  lint:
+    name: Lint & Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint Python
+        run: |
+          pip install flake8
+          flake8 app.py
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint Bash Script
+        run: shellcheck system_health.sh
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  build-and-push:
+    name: Build, Test & Push Image
+    needs: lint
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-intern-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t $IMAGE:latest \
+            -t $IMAGE:${{ github.sha }} .
+
+      - name: Smoke Test Container
+        run: |
+          docker run -d --name test -p 8080:8080 $IMAGE:latest
+          sleep 5
+          curl -fsS http://localhost:8080 | grep "running"
+          docker rm -f test
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker Image
+        run: |
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}
