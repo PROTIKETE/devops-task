@@ -1,0 +1,8 @@
+services:
+  web:
+    build: .
+    image: devops-intern-app:local
+    container_name: devops-intern-app
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
